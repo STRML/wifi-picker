@@ -25,16 +25,18 @@ final class StatusItemController: NSObject {
     }
 
     func open() {
-        guard !panel.isVisible, let anchor = anchorRect() else { return }
-        model.beginSession()
-        panel.place(under: anchor, height: desiredHeight(on: Self.screen(containing: anchor)))
-        panel.makeKeyAndOrderFront(nil)
-        installOutsideClickMonitor()
-        model.refreshFromSystem()
+        guard !model.isOpen, let anchor = anchorRect() else { return }
+        Task {
+            guard await model.beginSession() else { return }
+            panel.place(under: anchor, height: desiredHeight(on: Self.screen(containing: anchor)))
+            panel.makeKeyAndOrderFront(nil)
+            installOutsideClickMonitor()
+            model.refreshFromSystem()
+        }
     }
 
     func close() {
-        guard panel.isVisible else { return }
+        guard model.isOpen else { return }
         panel.orderOut(nil)
         model.endSession()
         removeOutsideClickMonitor()
@@ -45,7 +47,8 @@ final class StatusItemController: NSObject {
             showMenu()
             return
         }
-        panel.isVisible ? close() : open()
+        guard model.isOpen else { return open() }
+        panel.isVisible ? close() : panel.makeKeyAndOrderFront(nil)
     }
 
     private func showMenu() {

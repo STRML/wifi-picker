@@ -16,8 +16,7 @@ enum GridMode: Equatable {
 @MainActor
 @Observable
 final class PickerModel {
-    private(set) var store = NetworkStore()
-    private(set) var layout: FrozenLayout
+    private var session = PickerSession()
     private(set) var now = Date()
     private(set) var interface = InterfaceState(powerOn: true, ssid: nil, rssi: nil)
     private(set) var requestedPower: Bool?
@@ -25,7 +24,6 @@ final class PickerModel {
     private(set) var scanning = false
     private(set) var scanFailed = false
     private(set) var focusedSSID: String?
-    private(set) var isOpen = false
     private(set) var joiningSSID: String?
     private(set) var joinError: String?
     private(set) var passwordRequest: PasswordRequest?
@@ -33,6 +31,7 @@ final class PickerModel {
     @ObservationIgnored var onLayoutChange: (@MainActor () -> Void)?
     @ObservationIgnored var frameSink: (@MainActor (String, [String: CellFrames]) -> Void)?
     @ObservationIgnored private var frames: [String: CellFrames] = [:]
+    @ObservationIgnored private var opening = false
     @ObservationIgnored private var clockTask: Task<Void, Never>?
     @ObservationIgnored private let service: WiFiService
     @ObservationIgnored private let gate: LocationGate
@@ -41,8 +40,6 @@ final class PickerModel {
         self.service = service
         self.gate = gate
         access = gate.access
-        var empty = NetworkStore()
-        layout = LayoutEngine.freeze(&empty, now: Date())
         gate.onChange = { [weak self] access in self?.accessChanged(access) }
         Task { [weak self] in
             for await event in service.events {
@@ -50,6 +47,10 @@ final class PickerModel {
             }
         }
     }
+
+    var store: NetworkStore { session.store }
+    var layout: FrozenLayout { session.layout }
+    var isOpen: Bool { session.isOpen }
 
     var mode: GridMode {
         guard access == .granted else { return .locationNeeded(access) }
@@ -87,16 +88,20 @@ final class PickerModel {
         layout.cell(for: ssid, in: store, now: now)
     }
 
-    func beginSession() {
+    func beginSession() async -> Bool {
+        guard !isOpen, !opening else { return false }
+        opening = true
+        defer { opening = false }
         gate.requestIfNeeded()
+        await waitForFirstCacheRead()
         now = Date()
-        layout = LayoutEngine.freeze(&store, now: now)
+        guard session.open(at: now) else { return false }
         focusedSSID = nil
         scanFailed = false
         joinError = nil
         passwordRequest = nil
-        isOpen = true
         startClock()
+        return true
     }
 
     func refreshFromSystem() {
@@ -105,7 +110,7 @@ final class PickerModel {
     }
 
     func endSession() {
-        isOpen = false
+        session.close()
         clockTask?.cancel()
         clockTask = nil
     }
@@ -193,9 +198,8 @@ final class PickerModel {
 
     private func ingest(_ samples: [ScanSample]) {
         now = Date()
-        store.ingest(samples, at: now)
+        session.ingest(samples, at: now)
         guard isOpen else { return }
-        layout.absorb(store)
         onLayoutChange?()
     }
 
@@ -221,6 +225,13 @@ final class PickerModel {
         access = newAccess
         guard newAccess == .granted else { return }
         isOpen ? refreshFromSystem() : service.refreshCache()
+    }
+
+    private func waitForFirstCacheRead() async {
+        for _ in 0..<75 where !session.cacheLoaded {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        session.markCacheLoaded()
     }
 
     private func startClock() {

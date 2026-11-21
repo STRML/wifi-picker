@@ -152,9 +152,11 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
     }
 
     private func readCache() {
-        guard let interface = client.interface(), interface.powerOn() else { return }
-        guard let cached = interface.cachedScanResults() else { return }
-        ingest(Array(cached))
+        guard let interface = client.interface(), interface.powerOn() else {
+            continuation.yield(.samples([]))
+            return
+        }
+        ingest(Array(interface.cachedScanResults() ?? []))
     }
 
     private func ingest(_ found: [CWNetwork]) {
