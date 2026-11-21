@@ -71,7 +71,7 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
     func setPower(_ on: Bool) {
         queue.async { [self] in
             try? client.interface()?.setPower(on)
-            publishInterface()
+            publishInterface(force: true)
         }
     }
 
@@ -160,6 +160,7 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
     private func ingest(_ found: [CWNetwork]) {
         let known = knownSSIDs()
         var samples: [ScanSample] = []
+        var strongest: [String: CWNetwork] = [:]
         for network in found {
             guard let ssid = network.ssid, !ssid.isEmpty else { continue }
             samples.append(
@@ -172,10 +173,11 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
                     known: known.contains(ssid)
                 )
             )
-            if network.rssiValue >= (networks[ssid]?.rssiValue ?? Int.min) {
-                networks[ssid] = network
+            if network.rssiValue >= (strongest[ssid]?.rssiValue ?? Int.min) {
+                strongest[ssid] = network
             }
         }
+        networks.merge(strongest) { _, latest in latest }
         continuation.yield(.samples(samples))
     }
 
@@ -184,7 +186,7 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
         return Set(profiles.array.compactMap { ($0 as? CWNetworkProfile)?.ssid })
     }
 
-    private func publishInterface() {
+    private func publishInterface(force: Bool = false) {
         guard let interface = client.interface() else { return }
         let powerOn = interface.powerOn()
         let rssi = powerOn ? interface.rssiValue() : 0
@@ -193,7 +195,7 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
             ssid: powerOn ? interface.ssid() : nil,
             rssi: rssi == 0 ? nil : rssi
         )
-        guard state != lastInterface else { return }
+        guard force || state != lastInterface else { return }
         lastInterface = state
         continuation.yield(.interface(state))
     }

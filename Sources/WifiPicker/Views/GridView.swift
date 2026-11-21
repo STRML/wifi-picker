@@ -1,10 +1,15 @@
 import SwiftUI
 import WifiPickerCore
 
-struct CellFramesKey: PreferenceKey {
-    static let defaultValue: [String: CGRect] = [:]
+struct CellFrames: Equatable {
+    let window: CGRect
+    let grid: CGRect
+}
 
-    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+struct CellFramesKey: PreferenceKey {
+    static let defaultValue: [String: CellFrames] = [:]
+
+    static func reduce(value: inout [String: CellFrames], nextValue: () -> [String: CellFrames]) {
         value.merge(nextValue()) { _, new in new }
     }
 }

@@ -1,4 +1,4 @@
-import CoreGraphics
+import AppKit
 import WifiPickerCore
 
 enum Metrics {
@@ -19,8 +19,13 @@ enum Metrics {
     static let screenMargin: CGFloat = 8
     static let cornerRadius: CGFloat = 12
 
+    static let scrollerReserve: CGFloat = MainActor.assumeIsolated {
+        NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy).rounded(.up)
+    }
+
     static var cellWidth: CGFloat {
-        (panelWidth - 2 * gridInset - CGFloat(columns - 1) * columnSpacing) / CGFloat(columns)
+        let free = panelWidth - 2 * gridInset - scrollerReserve - CGFloat(columns - 1) * columnSpacing
+        return (free / CGFloat(columns)).rounded(.down)
     }
 
     static var chromeHeight: CGFloat {

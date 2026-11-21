@@ -12,5 +12,5 @@ while pgrep -x WifiPicker >/dev/null; do sleep 0.1; done
 mkdir -p "$HOME/Applications"
 [ -e "$dest" ] && /usr/bin/trash "$dest"
 ditto "$root/build/WifiPicker.app" "$dest"
-/usr/bin/open "$dest"
+/usr/bin/open "$dest" --args "$@"
 echo "$dest"

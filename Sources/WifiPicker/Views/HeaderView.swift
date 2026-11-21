@@ -36,7 +36,7 @@ struct HeaderView: View {
     }
 
     private var powerBinding: Binding<Bool> {
-        Binding(get: { model.interface.powerOn }, set: { model.setPower($0) })
+        Binding(get: { model.requestedPower ?? model.interface.powerOn }, set: { model.setPower($0) })
     }
 }
 

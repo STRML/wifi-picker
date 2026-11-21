@@ -20,6 +20,7 @@ final class PickerModel {
     private(set) var layout: FrozenLayout
     private(set) var now = Date()
     private(set) var interface = InterfaceState(powerOn: true, ssid: nil, rssi: nil)
+    private(set) var requestedPower: Bool?
     private(set) var access: LocationAccess
     private(set) var scanning = false
     private(set) var scanFailed = false
@@ -30,8 +31,8 @@ final class PickerModel {
     private(set) var passwordRequest: PasswordRequest?
 
     @ObservationIgnored var onLayoutChange: (@MainActor () -> Void)?
-    @ObservationIgnored var frameSink: (@MainActor ([String: CGRect]) -> Void)?
-    @ObservationIgnored private var frames: [String: CGRect] = [:]
+    @ObservationIgnored var frameSink: (@MainActor (String, [String: CellFrames]) -> Void)?
+    @ObservationIgnored private var frames: [String: CellFrames] = [:]
     @ObservationIgnored private var clockTask: Task<Void, Never>?
     @ObservationIgnored private let service: WiFiService
     @ObservationIgnored private let gate: LocationGate
@@ -115,7 +116,7 @@ final class PickerModel {
     }
 
     func setPower(_ on: Bool) {
-        interface.powerOn = on
+        requestedPower = on
         service.setPower(on)
     }
 
@@ -123,9 +124,9 @@ final class PickerModel {
         focusedSSID = layout.move(from: focusedSSID, direction, columns: Metrics.columns)
     }
 
-    func cellFramesChanged(_ newFrames: [String: CGRect]) {
+    func cellFramesChanged(_ newFrames: [String: CellFrames]) {
         frames = newFrames
-        frameSink?(newFrames)
+        frameSink?("layout", newFrames)
     }
 
     func activate(_ ssid: String) {
@@ -200,6 +201,7 @@ final class PickerModel {
 
     private func apply(_ state: InterfaceState) {
         let turnedOn = state.powerOn && !interface.powerOn
+        requestedPower = nil
         interface = state
         if turnedOn && isOpen { refreshFromSystem() }
     }
@@ -211,7 +213,7 @@ final class PickerModel {
         Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
             guard let self else { return }
-            frameSink?(frames)
+            frameSink?("scan-finished", frames)
         }
     }
 

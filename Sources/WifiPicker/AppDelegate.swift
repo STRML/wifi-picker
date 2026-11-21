@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = PickerModel(service: service, gate: LocationGate())
         if let path = options.dumpFramesPath {
             let dumper = FrameDumper(path: path)
-            model.frameSink = { dumper.write($0) }
+            model.frameSink = { dumper.write(reason: $0, frames: $1) }
             self.dumper = dumper
         }
         let controller = StatusItemController(model: model, dismissOnOutsideClick: !options.openPanel)

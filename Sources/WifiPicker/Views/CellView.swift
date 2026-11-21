@@ -38,7 +38,7 @@ struct CellView: View {
             GeometryReader { proxy in
                 Color.clear.preference(
                     key: CellFramesKey.self,
-                    value: [ssid: proxy.frame(in: .named(space))]
+                    value: [ssid: CellFrames(window: proxy.frame(in: .global), grid: proxy.frame(in: .named(space)))]
                 )
             }
         }
