@@ -9,10 +9,15 @@ public struct NetworkEntry: Sendable, Equatable {
     public var firstSeen: Date
     public var lastSeen: Date
 
-    public var signal: Double {
-        let weakest = -90.0
-        let strongest = -45.0
-        return min(1, max(0, (Double(rssi) - weakest) / (strongest - weakest)))
+    public var signal: Double { SignalLevel.value(forRSSI: rssi) }
+}
+
+public enum SignalLevel {
+    static let weakest = -90.0
+    static let strongest = -45.0
+
+    public static func value(forRSSI rssi: Int) -> Double {
+        min(1, max(0, (Double(rssi) - weakest) / (strongest - weakest)))
     }
 }
 
