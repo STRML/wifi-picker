@@ -16,14 +16,13 @@ struct CellView: View {
 
     var body: some View {
         Button(action: activate) {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 Text(ssid)
                     .font(.system(size: 13))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Spacer(minLength: 4)
-                glyph("lock.fill", visible: cell.entry.secure, size: 10)
-                glyph("checkmark", visible: isCurrent, size: 11, weight: .bold)
+                Spacer(minLength: 2)
+                statusGlyph
                 signalSlot
             }
             .padding(.horizontal, 8)
@@ -60,6 +59,15 @@ struct CellView: View {
                 .opacity(isJoining ? 1 : 0)
         }
         .frame(width: 18, height: 16)
+    }
+
+    @ViewBuilder
+    private var statusGlyph: some View {
+        if isCurrent {
+            glyph("checkmark", visible: true, size: 11, weight: .bold)
+        } else {
+            glyph("lock.fill", visible: cell.entry.secure, size: 10)
+        }
     }
 
     private func glyph(_ name: String, visible: Bool, size: CGFloat, weight: Font.Weight = .regular) -> some View {

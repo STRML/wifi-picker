@@ -51,15 +51,15 @@ private struct StatusLine: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            ProgressView()
-                .controlSize(.mini)
-                .opacity(model.isBusy ? 1 : 0)
-                .frame(width: 12, height: 12)
             Text(model.statusLine)
                 .font(.system(size: 11))
                 .foregroundStyle(model.statusIsError ? Color.red : Color.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
+            ProgressView()
+                .controlSize(.mini)
+                .opacity(model.isBusy ? 1 : 0)
+                .frame(width: 12, height: 12)
         }
         .frame(height: 14)
     }
