@@ -29,7 +29,8 @@ codesign --force --options runtime --timestamp \
     --entitlements Resources/WifiPicker.entitlements \
     --sign "$identity" "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
-codesign -d --entitlements - "$app" 2>/dev/null | grep -q "com.apple.security.personal-information.location" \
+entitlements="$(codesign -d --entitlements - "$app" 2>/dev/null)"
+grep -q "com.apple.security.personal-information.location" <<<"$entitlements" \
     || { echo "location entitlement missing from signed app" >&2; exit 1; }
 
 echo "$app"

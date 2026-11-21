@@ -5,9 +5,19 @@ struct GridArea: View {
     let model: PickerModel
 
     var body: some View {
+        let showsGrid = model.mode == .networks
+        GridView(model: model)
+            .opacity(showsGrid ? 1 : 0)
+            .allowsHitTesting(showsGrid)
+            .accessibilityHidden(!showsGrid)
+            .overlay { emptyState }
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
         switch model.mode {
         case .networks:
-            GridView(model: model)
+            EmptyView()
         case .locationNeeded(let access):
             locationState(access)
         case .wifiOff:
