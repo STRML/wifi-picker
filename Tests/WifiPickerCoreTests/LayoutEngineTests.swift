@@ -15,17 +15,22 @@ import Testing
         for _ in 0..<50 {
             var shuffled = store(samples.shuffled(using: &rng))
             let layout = LayoutEngine.freeze(&shuffled, now: t0)
-            #expect(layout.sections == expected.sections)
+            #expect(layout.columns == expected.columns)
         }
     }
 
-    @Test func freezePlacesKnownBeforeOtherAndLeavesNewEmpty() {
-        var s = store([sample("zeta", known: true), sample("alpha")])
+    @Test func freezeSplitsIntoHotspotsKnownAndOther() {
+        var s = store([
+            sample("zeta", known: true),
+            sample("alpha"),
+            sample("Sam’s iPhone", known: true),
+            sample("Galaxy S10"),
+        ])
         let layout = LayoutEngine.freeze(&s, now: t0)
-        #expect(layout.sections.map(\.kind) == [.known, .other, .new])
+        #expect(layout.columns.map(\.kind) == [.hotspots, .known, .other])
+        #expect(layout.slots(in: .hotspots) == ["Galaxy S10", "Sam’s iPhone"])
         #expect(layout.slots(in: .known) == ["zeta"])
         #expect(layout.slots(in: .other) == ["alpha"])
-        #expect(layout.slots(in: .new).isEmpty)
     }
 
     @Test func sortIgnoresCaseAndBreaksTiesByBytes() {
@@ -91,16 +96,33 @@ import Testing
         #expect(next.slots(in: .known) == ["anchor", "flip"])
     }
 
-    @Test func newSSIDsAppendToNewInArrivalOrder() {
-        var s = store([sample("a"), sample("b")])
+    @Test func newSSIDsAppendToTheBottomOfTheirOwnColumnInArrivalOrder() {
+        var s = store([sample("a"), sample("b"), sample("K", known: true), sample("iPhone A")])
         var layout = LayoutEngine.freeze(&s, now: t0)
 
-        s.ingest([sample("zz")], at: t0.addingTimeInterval(1))
-        s.ingest([sample("aa")], at: t0.addingTimeInterval(2))
+        s.ingest([sample("zz"), sample("Galaxy X")], at: t0.addingTimeInterval(1))
+        s.ingest([sample("aa"), sample("Known2", known: true)], at: t0.addingTimeInterval(2))
+        s.ingest([sample("Pixel 7")], at: t0.addingTimeInterval(3))
         layout.absorb(s)
-        #expect(layout.slots(in: .new) == ["zz", "aa"])
-        #expect(layout.slots(in: .other) == ["a", "b"])
-        #expect(layout.readingOrder == ["a", "b", "zz", "aa"])
+        #expect(layout.slots(in: .other) == ["a", "b", "zz", "aa"])
+        #expect(layout.slots(in: .known) == ["K", "Known2"])
+        #expect(layout.slots(in: .hotspots) == ["iPhone A", "Galaxy X", "Pixel 7"])
+    }
+
+    @Test func aHotspotThatIsAlsoKnownGoesToHotspots() {
+        var s = store([sample("Sam’s iPhone", known: true)])
+        let layout = LayoutEngine.freeze(&s, now: t0)
+        #expect(layout.slots(in: .hotspots) == ["Sam’s iPhone"])
+        #expect(layout.slots(in: .known).isEmpty)
+    }
+
+    @Test func columnOfReportsMembership() {
+        var s = store([sample("iPhone"), sample("home", known: true), sample("cafe")])
+        let layout = LayoutEngine.freeze(&s, now: t0)
+        #expect(layout.column(of: "iPhone") == .hotspots)
+        #expect(layout.column(of: "home") == .known)
+        #expect(layout.column(of: "cafe") == .other)
+        #expect(layout.column(of: "nope") == nil)
     }
 
     @Test func absorbIsIdempotent() {
@@ -108,8 +130,8 @@ import Testing
         var layout = LayoutEngine.freeze(&s, now: t0)
         s.ingest([sample("n")], at: t0.addingTimeInterval(1))
         layout.absorb(s)
-        let once = layout.sections
+        let once = layout.columns
         layout.absorb(s)
-        #expect(layout.sections == once)
+        #expect(layout.columns == once)
     }
 }

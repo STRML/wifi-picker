@@ -83,7 +83,7 @@ final class StatusItemController: NSObject {
     private func desiredHeight(on screen: NSScreen?) -> CGFloat {
         let visible = (screen ?? NSScreen.main)?.visibleFrame.height ?? 900
         return Metrics.panelHeight(
-            for: model.layout.rows(columns: Metrics.columns),
+            for: model.layout,
             maxHeight: visible * Metrics.maxHeightFraction
         )
     }

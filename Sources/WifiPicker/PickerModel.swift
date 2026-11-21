@@ -126,7 +126,7 @@ final class PickerModel {
     }
 
     func moveFocus(_ direction: MoveDirection) {
-        focusedSSID = layout.move(from: focusedSSID, direction, columns: Metrics.columns)
+        focusedSSID = layout.move(from: focusedSSID, direction)
     }
 
     func cellFramesChanged(_ newFrames: [String: CellFrames]) {

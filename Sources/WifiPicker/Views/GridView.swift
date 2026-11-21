@@ -2,6 +2,7 @@ import SwiftUI
 import WifiPickerCore
 
 struct CellFrames: Equatable {
+    let column: String
     let window: CGRect
     let grid: CGRect
 }
@@ -19,20 +20,11 @@ struct GridView: View {
     private static let space = "grid"
 
     var body: some View {
-        let rows = model.layout.rows(columns: Metrics.columns)
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                        if row.startsSection {
-                            SectionHeader(kind: row.section)
-                        }
-                        HStack(alignment: .top, spacing: Metrics.columnSpacing) {
-                            ForEach(row.slots, id: \.self) { ssid in
-                                slot(ssid)
-                            }
-                        }
-                        .frame(height: Metrics.rowPitch, alignment: .top)
+                HStack(alignment: .top, spacing: Metrics.columnSpacing) {
+                    ForEach(model.layout.columns, id: \.kind.rawValue) { column in
+                        columnView(column)
                     }
                 }
                 .padding(.horizontal, Metrics.gridInset)
@@ -40,7 +32,6 @@ struct GridView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .coordinateSpace(.named(Self.space))
             }
-            .overlay { placeholder(isEmpty: rows.isEmpty) }
             .onChange(of: model.focusedSSID) { _, ssid in
                 guard let ssid else { return }
                 proxy.scrollTo(ssid)
@@ -49,11 +40,26 @@ struct GridView: View {
         }
     }
 
+    private func columnView(_ column: LayoutColumn) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ColumnHeader(kind: column.kind)
+            if column.slots.isEmpty {
+                Placeholder()
+            }
+            ForEach(column.slots, id: \.self) { ssid in
+                slot(ssid, in: column.kind)
+                    .frame(height: Metrics.rowPitch, alignment: .top)
+            }
+        }
+        .frame(width: Metrics.cellWidth, alignment: .top)
+    }
+
     @ViewBuilder
-    private func slot(_ ssid: String) -> some View {
+    private func slot(_ ssid: String, in column: ColumnKind) -> some View {
         if let cell = model.cell(for: ssid) {
             CellView(
                 ssid: ssid,
+                column: column,
                 cell: cell,
                 isCurrent: model.interface.ssid == ssid,
                 isFocused: model.focusedSSID == ssid,
@@ -65,35 +71,47 @@ struct GridView: View {
             Color.clear.frame(width: Metrics.cellWidth, height: Metrics.cellHeight)
         }
     }
+}
 
-    @ViewBuilder
-    private func placeholder(isEmpty: Bool) -> some View {
-        if isEmpty {
-            Text(model.scanning ? "Looking for networks…" : "No networks found")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-        }
+private struct Placeholder: View {
+    var body: some View {
+        Text("None nearby")
+            .font(.system(size: 12))
+            .foregroundStyle(.tertiary)
+            .padding(.leading, 8)
+            .frame(width: Metrics.cellWidth, height: Metrics.cellHeight, alignment: .leading)
+            .frame(height: Metrics.rowPitch, alignment: .top)
     }
 }
 
-private struct SectionHeader: View {
-    let kind: SectionKind
+private struct ColumnHeader: View {
+    let kind: ColumnKind
 
     var body: some View {
-        Text(title)
+        Label(title, systemImage: symbol)
+            .labelStyle(.titleAndIcon)
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
+            .lineLimit(1)
             .padding(.leading, 8)
             .padding(.bottom, 4)
-            .frame(maxWidth: .infinity, alignment: .bottomLeading)
-            .frame(height: Metrics.sectionHeaderHeight)
+            .frame(width: Metrics.cellWidth, alignment: .bottomLeading)
+            .frame(height: Metrics.columnHeaderHeight)
     }
 
     private var title: String {
         switch kind {
-        case .known: "Known Networks"
-        case .other: "Other Networks"
-        case .new: "New"
+        case .hotspots: "Hotspots"
+        case .known: "Known"
+        case .other: "Other"
+        }
+    }
+
+    private var symbol: String {
+        switch kind {
+        case .hotspots: "personalhotspot"
+        case .known: "star.fill"
+        case .other: "wifi"
         }
     }
 }

@@ -8,7 +8,7 @@ enum Metrics {
     static let columnSpacing: CGFloat = 6
     static let cellHeight: CGFloat = 30
     static let rowPitch: CGFloat = 34
-    static let sectionHeaderHeight: CGFloat = 26
+    static let columnHeaderHeight: CGFloat = 26
     static let gridVerticalInset: CGFloat = 8
     static let headerHeight: CGFloat = 60
     static let footerHeight: CGFloat = 34
@@ -32,14 +32,13 @@ enum Metrics {
         headerHeight + footerHeight + 2 * separatorHeight
     }
 
-    static func contentHeight(for rows: [GridRow]) -> CGFloat {
-        let headers = rows.filter(\.startsSection).count
-        return 2 * gridVerticalInset + CGFloat(headers) * sectionHeaderHeight + CGFloat(rows.count) * rowPitch
+    static func contentHeight(for layout: FrozenLayout) -> CGFloat {
+        2 * gridVerticalInset + columnHeaderHeight + CGFloat(max(1, layout.tallestColumnCount)) * rowPitch
     }
 
-    static func panelHeight(for rows: [GridRow], maxHeight: CGFloat) -> CGFloat {
+    static func panelHeight(for layout: FrozenLayout, maxHeight: CGFloat) -> CGFloat {
         let maxContent = max(minContentHeight, maxHeight - chromeHeight)
-        let content = min(max(contentHeight(for: rows), minContentHeight), maxContent)
+        let content = min(max(contentHeight(for: layout), minContentHeight), maxContent)
         return chromeHeight + content
     }
 }

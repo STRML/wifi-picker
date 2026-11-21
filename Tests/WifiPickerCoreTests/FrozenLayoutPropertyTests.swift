@@ -3,7 +3,7 @@ import Testing
 @testable import WifiPickerCore
 
 @Suite struct FrozenLayoutPropertyTests {
-    private static let pool = (0..<60).map { "net-\($0)" }
+    private static let pool = (0..<60).map { $0 % 6 == 0 ? "Galaxy-\($0)" : "net-\($0)" }
 
     private static func randomBatch(using rng: inout SplitMix64) -> [ScanSample] {
         let count = Int.random(in: 1...25, using: &rng)
@@ -23,31 +23,40 @@ import Testing
         }
     }
 
-    @Test func slotsOnlyAppendAfterFreeze() {
+    private static func membership(_ layout: FrozenLayout) -> [String: ColumnKind] {
+        var result: [String: ColumnKind] = [:]
+        for column in layout.columns {
+            for ssid in column.slots { result[ssid] = column.kind }
+        }
+        return result
+    }
+
+    @Test func columnsOnlyAppendAfterFreeze() {
         for iteration in 0..<500 {
             var rng = SplitMix64(seed: UInt64(iteration) &+ 1)
             var store = NetworkStore()
             var now = t0
             store.ingest(Self.randomBatch(using: &rng), at: now)
             var layout = LayoutEngine.freeze(&store, now: now)
-            let frozenKnown = layout.slots(in: .known)
-            let frozenOther = layout.slots(in: .other)
 
             for _ in 0..<Int.random(in: 1...30, using: &rng) {
-                let before = SectionKind.allCases.map { layout.slots(in: $0) }
+                let before = ColumnKind.allCases.map { layout.slots(in: $0) }
+                let placed = Self.membership(layout)
                 now = now.addingTimeInterval(Double.random(in: 0...90, using: &rng))
                 store.ingest(Self.randomBatch(using: &rng), at: now)
                 layout.absorb(store)
 
-                for (index, kind) in SectionKind.allCases.enumerated() {
+                for (index, kind) in ColumnKind.allCases.enumerated() {
                     let after = layout.slots(in: kind)
                     #expect(
                         Array(after.prefix(before[index].count)) == before[index],
                         "iteration \(iteration): \(kind) slots changed"
                     )
                 }
-                #expect(layout.slots(in: .known) == frozenKnown, "iteration \(iteration)")
-                #expect(layout.slots(in: .other) == frozenOther, "iteration \(iteration)")
+                let afterMembership = Self.membership(layout)
+                for (ssid, kind) in placed {
+                    #expect(afterMembership[ssid] == kind, "iteration \(iteration): \(ssid) changed column")
+                }
                 #expect(Set(layout.readingOrder).count == layout.readingOrder.count, "iteration \(iteration)")
             }
             #expect(!layout.readingOrder.isEmpty, "iteration \(iteration)")

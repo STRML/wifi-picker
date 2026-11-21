@@ -5,6 +5,7 @@ import Foundation
 final class FrameDumper {
     private struct Cell: Encodable {
         let ssid: String
+        let column: String
         let x: Double
         let y: Double
         let width: Double
@@ -32,7 +33,7 @@ final class FrameDumper {
 
     func write(reason: String, frames: [String: CellFrames]) {
         let cells = frames
-            .map { Cell(ssid: $0.key, x: $0.value.window.minX, y: $0.value.window.minY, width: $0.value.window.width, height: $0.value.window.height, gridX: $0.value.grid.minX, gridY: $0.value.grid.minY) }
+            .map { Cell(ssid: $0.key, column: $0.value.column, x: $0.value.window.minX, y: $0.value.window.minY, width: $0.value.window.width, height: $0.value.window.height, gridX: $0.value.grid.minX, gridY: $0.value.grid.minY) }
             .sorted { ($0.y, $0.x, $0.ssid) < ($1.y, $1.x, $1.ssid) }
         pass += 1
         let record = Pass(pass: pass, reason: reason, time: ISO8601DateFormatter().string(from: Date()), cells: cells)

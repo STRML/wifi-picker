@@ -3,6 +3,7 @@ import WifiPickerCore
 
 struct CellView: View {
     let ssid: String
+    let column: ColumnKind
     let cell: LayoutCell
     let isCurrent: Bool
     let isFocused: Bool
@@ -38,7 +39,7 @@ struct CellView: View {
             GeometryReader { proxy in
                 Color.clear.preference(
                     key: CellFramesKey.self,
-                    value: [ssid: CellFrames(window: proxy.frame(in: .global), grid: proxy.frame(in: .named(space)))]
+                    value: [ssid: CellFrames(column: String(describing: column), window: proxy.frame(in: .global), grid: proxy.frame(in: .named(space)))]
                 )
             }
         }
