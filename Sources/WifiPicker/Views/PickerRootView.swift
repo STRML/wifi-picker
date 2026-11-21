@@ -5,14 +5,26 @@ struct PickerRootView: View {
     let model: PickerModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(model.title).font(.headline)
-            Text(model.statusLine).foregroundStyle(.secondary)
-            ForEach(model.layout.readingOrder, id: \.self) { ssid in
-                Text(ssid).lineLimit(1)
-            }
+        VStack(spacing: 0) {
+            HeaderView(model: model)
+                .frame(height: Metrics.headerHeight)
+            Separator()
+            GridArea(model: model)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Separator()
+            FooterView()
+                .frame(height: Metrics.footerHeight)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(12)
+        .frame(width: Metrics.panelWidth)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .transaction { $0.animation = nil }
+    }
+}
+
+struct Separator: View {
+    var body: some View {
+        Rectangle()
+            .fill(.separator)
+            .frame(height: Metrics.separatorHeight)
     }
 }

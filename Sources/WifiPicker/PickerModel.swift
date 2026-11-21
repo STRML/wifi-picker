@@ -108,6 +108,8 @@ final class PickerModel {
         frameSink?(newFrames)
     }
 
+    func activate(_ ssid: String) {}
+
     func requestLocation() {
         gate.requestIfNeeded()
     }
