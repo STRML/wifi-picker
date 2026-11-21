@@ -10,7 +10,7 @@ enum Metrics {
     static let rowPitch: CGFloat = 34
     static let columnHeaderHeight: CGFloat = 26
     static let gridVerticalInset: CGFloat = 8
-    static let headerHeight: CGFloat = 60
+    static let headerHeight: CGFloat = 86
     static let footerHeight: CGFloat = 34
     static let separatorHeight: CGFloat = 1
     static let minContentHeight: CGFloat = 176

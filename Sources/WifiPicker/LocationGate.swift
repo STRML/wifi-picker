@@ -11,17 +11,20 @@ final class LocationGate: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     var onChange: (@MainActor (LocationAccess) -> Void)?
 
-    override init() {
+    private let demo: Bool
+
+    init(demo: Bool = false) {
+        self.demo = demo
         super.init()
         manager.delegate = self
     }
 
     var access: LocationAccess {
-        Self.access(for: manager.authorizationStatus)
+        demo ? .granted : Self.access(for: manager.authorizationStatus)
     }
 
     func requestIfNeeded() {
-        guard access == .undetermined else { return }
+        guard !demo, access == .undetermined else { return }
         manager.requestWhenInUseAuthorization()
     }
 

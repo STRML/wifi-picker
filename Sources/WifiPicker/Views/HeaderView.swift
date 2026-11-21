@@ -5,6 +5,14 @@ struct HeaderView: View {
     let model: PickerModel
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            titleRow
+            StatsRow(stats: model.stats)
+        }
+        .padding(.horizontal, 14)
+    }
+
+    private var titleRow: some View {
         HStack(spacing: 10) {
             statusGlyph
             VStack(alignment: .leading, spacing: 2) {
@@ -20,7 +28,6 @@ struct HeaderView: View {
                 .labelsHidden()
                 .toggleStyle(AccentSwitchStyle())
         }
-        .padding(.horizontal, 14)
     }
 
     private var statusGlyph: some View {

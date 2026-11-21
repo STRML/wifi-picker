@@ -8,8 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let options = LaunchOptions(arguments: CommandLine.arguments)
-        let service = WiFiService()
-        let model = PickerModel(service: service, gate: LocationGate())
+        let service = WiFiService(demo: options.demo)
+        let model = PickerModel(service: service, gate: LocationGate(demo: options.demo))
         if let path = options.dumpFramesPath {
             let dumper = FrameDumper(path: path)
             model.frameSink = { dumper.write(reason: $0, frames: $1) }

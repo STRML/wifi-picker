@@ -27,6 +27,7 @@ final class PickerModel {
     private(set) var joiningSSID: String?
     private(set) var joinError: String?
     private(set) var passwordRequest: PasswordRequest?
+    private(set) var stats: LinkStats?
 
     @ObservationIgnored var onLayoutChange: (@MainActor () -> Void)?
     @ObservationIgnored var frameSink: (@MainActor (String, [String: CellFrames]) -> Void)?
@@ -101,6 +102,7 @@ final class PickerModel {
         joinError = nil
         passwordRequest = nil
         startClock()
+        service.setLive(true)
         return true
     }
 
@@ -113,6 +115,8 @@ final class PickerModel {
         session.close()
         clockTask?.cancel()
         clockTask = nil
+        service.setLive(false)
+        stats = nil
     }
 
     func rescan() {
@@ -173,6 +177,7 @@ final class PickerModel {
         case .scanStarted: scanning = true
         case .scanFinished(let failed): finishScan(failed: failed)
         case .joinFinished(let ssid, let outcome): finishJoin(ssid, outcome)
+        case .stats(let value): stats = value
         }
     }
 

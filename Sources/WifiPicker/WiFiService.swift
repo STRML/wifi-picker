@@ -14,6 +14,7 @@ enum WiFiEvent: Sendable {
     case scanStarted
     case scanFinished(failed: Bool)
     case joinFinished(ssid: String, outcome: JoinOutcome)
+    case stats(LinkStats?)
 }
 
 private struct UncheckedBox<Value>: @unchecked Sendable {
@@ -30,19 +31,23 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
     private var lastInterface: InterfaceState?
     private let scanLock = NSLock()
     private var scanning = false
+    private let demo: Bool
+    private var live = false
 
-    override init() {
+    init(demo: Bool = false) {
         let pair = AsyncStream.makeStream(of: WiFiEvent.self, bufferingPolicy: .unbounded)
         events = pair.stream
         continuation = pair.continuation
+        self.demo = demo
         super.init()
     }
 
     func start() {
+        guard !demo else { return emitDemo() }
         queue.async { [self] in
             client.delegate = self
             let monitored: [CWEventType] = [
-                .scanCacheUpdated, .powerDidChange, .ssidDidChange, .linkDidChange, .linkQualityDidChange,
+                .scanCacheUpdated, .powerDidChange, .ssidDidChange, .linkDidChange,
             ]
             for event in monitored {
                 try? client.startMonitoringEvent(with: event)
@@ -53,6 +58,7 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
     }
 
     func refreshCache() {
+        guard !demo else { return emitDemo() }
         queue.async { [self] in
             publishInterface()
             readCache()
@@ -60,6 +66,7 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
     }
 
     func scan() {
+        guard !demo else { return emitDemo() }
         guard beginScan() else { return }
         continuation.yield(.scanStarted)
         scanQueue.async { [self] in
@@ -69,6 +76,7 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
     }
 
     func setPower(_ on: Bool) {
+        guard !demo else { return }
         queue.async { [self] in
             try? client.interface()?.setPower(on)
             publishInterface(force: true)
@@ -76,6 +84,7 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
     }
 
     func join(ssid: String, password: String?, secure: Bool) {
+        guard !demo else { return }
         queue.async { [self] in
             let outcome = associate(ssid: ssid, password: password, secure: secure)
             publishInterface()
@@ -100,7 +109,31 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
     }
 
     func linkQualityDidChangeForWiFiInterface(withName interfaceName: String, rssi: Int, transmitRate: Double) {
-        queue.async { [self] in publishInterface() }
+        queue.async { [self] in
+            publishInterface()
+            publishStats()
+        }
+    }
+
+    func setLive(_ on: Bool) {
+        guard !demo else {
+            continuation.yield(.stats(on ? DemoNetworks.stats : nil))
+            return
+        }
+        queue.async { [self] in
+            live = on
+            if on {
+                try? client.startMonitoringEvent(with: .linkQualityDidChange)
+                publishStats()
+            } else {
+                try? client.stopMonitoringEvent(with: .linkQualityDidChange)
+            }
+        }
+    }
+
+    private func publishStats() {
+        guard live else { return }
+        continuation.yield(.stats(client.interface().flatMap(LinkStats.read)))
     }
 
     private func associate(ssid: String, password: String?, secure: Bool) -> JoinOutcome {
@@ -149,6 +182,11 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
         }
         ingest(Array(found.value))
         continuation.yield(.scanFinished(failed: false))
+    }
+
+    private func emitDemo() {
+        continuation.yield(.interface(InterfaceState(powerOn: true, ssid: DemoNetworks.current, rssi: -44)))
+        continuation.yield(.samples(DemoNetworks.samples))
     }
 
     private func readCache() {
