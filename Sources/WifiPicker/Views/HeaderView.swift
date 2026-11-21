@@ -47,11 +47,11 @@ private struct StatusLine: View {
         HStack(spacing: 5) {
             ProgressView()
                 .controlSize(.mini)
-                .opacity(model.scanning ? 1 : 0)
+                .opacity(model.isBusy ? 1 : 0)
                 .frame(width: 12, height: 12)
             Text(model.statusLine)
                 .font(.system(size: 11))
-                .foregroundStyle(model.scanFailed ? Color.red : Color.secondary)
+                .foregroundStyle(model.statusIsError ? Color.red : Color.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
         }

@@ -13,6 +13,7 @@ enum WiFiEvent: Sendable {
     case interface(InterfaceState)
     case scanStarted
     case scanFinished(failed: Bool)
+    case joinFinished(ssid: String, outcome: JoinOutcome)
 }
 
 private struct UncheckedBox<Value>: @unchecked Sendable {
@@ -74,6 +75,14 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
         }
     }
 
+    func join(ssid: String, password: String?, secure: Bool) {
+        queue.async { [self] in
+            let outcome = associate(ssid: ssid, password: password, secure: secure)
+            publishInterface()
+            continuation.yield(.joinFinished(ssid: ssid, outcome: outcome))
+        }
+    }
+
     func scanCacheUpdatedForWiFiInterface(withName interfaceName: String) {
         queue.async { [self] in readCache() }
     }
@@ -92,6 +101,23 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
 
     func linkQualityDidChangeForWiFiInterface(withName interfaceName: String, rssi: Int, transmitRate: Double) {
         queue.async { [self] in publishInterface() }
+    }
+
+    private func associate(ssid: String, password: String?, secure: Bool) -> JoinOutcome {
+        guard let interface = client.interface(), let network = networks[ssid] else {
+            return .failed("Network not in range")
+        }
+        do {
+            try interface.associate(to: network, password: password)
+            return .connected
+        } catch let error as NSError {
+            return JoinPolicy.outcome(
+                forErrorCode: error.code,
+                message: error.localizedDescription,
+                hadPassword: password != nil,
+                secure: secure
+            )
+        }
     }
 
     private func beginScan() -> Bool {

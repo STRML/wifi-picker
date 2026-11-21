@@ -60,13 +60,16 @@ final class StatusItemController: NSObject {
     private func handle(_ key: PanelKey) -> Bool {
         switch key {
         case .escape:
-            close()
+            if !model.dismissPasswordRequest() { close() }
             return true
         case .arrow(let direction):
+            guard model.passwordRequest == nil else { return false }
             model.moveFocus(direction)
             return true
         case .confirm:
-            return false
+            guard model.passwordRequest == nil else { return false }
+            model.activateFocused()
+            return true
         }
     }
 

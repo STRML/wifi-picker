@@ -11,6 +11,11 @@ struct PickerRootView: View {
             Separator()
             GridArea(model: model)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay {
+                    if let request = model.passwordRequest {
+                        PasswordSheet(model: model, request: request)
+                    }
+                }
             Separator()
             FooterView()
                 .frame(height: Metrics.footerHeight)

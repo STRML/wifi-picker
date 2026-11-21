@@ -52,6 +52,7 @@ struct GridView: View {
                 cell: cell,
                 isCurrent: model.interface.ssid == ssid,
                 isFocused: model.focusedSSID == ssid,
+                isJoining: model.joiningSSID == ssid,
                 space: Self.space,
                 activate: { model.activate(ssid) }
             )

@@ -2,6 +2,11 @@ import AppKit
 import Observation
 import WifiPickerCore
 
+struct PasswordRequest: Equatable {
+    let ssid: String
+    var error: String?
+}
+
 enum GridMode: Equatable {
     case networks
     case locationNeeded(LocationAccess)
@@ -20,6 +25,9 @@ final class PickerModel {
     private(set) var scanFailed = false
     private(set) var focusedSSID: String?
     private(set) var isOpen = false
+    private(set) var joiningSSID: String?
+    private(set) var joinError: String?
+    private(set) var passwordRequest: PasswordRequest?
 
     @ObservationIgnored var onLayoutChange: (@MainActor () -> Void)?
     @ObservationIgnored var frameSink: (@MainActor ([String: CGRect]) -> Void)?
@@ -51,7 +59,17 @@ final class PickerModel {
         access == .granted && interface.powerOn
     }
 
+    var statusIsError: Bool {
+        joiningSSID == nil && (joinError != nil || scanFailed)
+    }
+
+    var isBusy: Bool {
+        scanning || joiningSSID != nil
+    }
+
     var statusLine: String {
+        if let joiningSSID { return "Joining \(joiningSSID)…" }
+        if let joinError { return joinError }
         if scanFailed { return "Scan failed" }
         if access != .granted { return "Location access needed" }
         if !interface.powerOn { return "Wi-Fi is off" }
@@ -74,6 +92,8 @@ final class PickerModel {
         layout = LayoutEngine.freeze(&store, now: now)
         focusedSSID = nil
         scanFailed = false
+        joinError = nil
+        passwordRequest = nil
         isOpen = true
         startClock()
     }
@@ -108,7 +128,33 @@ final class PickerModel {
         frameSink?(newFrames)
     }
 
-    func activate(_ ssid: String) {}
+    func activate(_ ssid: String) {
+        guard joiningSSID == nil, passwordRequest == nil, ssid != interface.ssid else { return }
+        guard let cell = cell(for: ssid), !cell.dimmed else { return }
+        joinError = nil
+        guard !JoinPolicy.needsPasswordUpFront(secure: cell.entry.secure, known: cell.entry.known) else {
+            passwordRequest = PasswordRequest(ssid: ssid, error: nil)
+            return
+        }
+        startJoin(ssid, password: nil, secure: cell.entry.secure)
+    }
+
+    func activateFocused() {
+        guard let focusedSSID else { return }
+        activate(focusedSSID)
+    }
+
+    func submitPassword(_ password: String) {
+        guard let request = passwordRequest, joiningSSID == nil, !password.isEmpty else { return }
+        passwordRequest = PasswordRequest(ssid: request.ssid, error: nil)
+        startJoin(request.ssid, password: password, secure: true)
+    }
+
+    func dismissPasswordRequest() -> Bool {
+        guard passwordRequest != nil else { return false }
+        if joiningSSID == nil { passwordRequest = nil }
+        return true
+    }
 
     func requestLocation() {
         gate.requestIfNeeded()
@@ -120,6 +166,27 @@ final class PickerModel {
         case .interface(let state): apply(state)
         case .scanStarted: scanning = true
         case .scanFinished(let failed): finishScan(failed: failed)
+        case .joinFinished(let ssid, let outcome): finishJoin(ssid, outcome)
+        }
+    }
+
+    private func startJoin(_ ssid: String, password: String?, secure: Bool) {
+        joiningSSID = ssid
+        service.join(ssid: ssid, password: password, secure: secure)
+    }
+
+    private func finishJoin(_ ssid: String, _ outcome: JoinOutcome) {
+        joiningSSID = nil
+        switch outcome {
+        case .connected:
+            passwordRequest = nil
+        case .needsPassword:
+            passwordRequest = PasswordRequest(ssid: ssid, error: nil)
+        case .wrongPassword:
+            passwordRequest = PasswordRequest(ssid: ssid, error: "Wrong password")
+        case .failed:
+            passwordRequest = nil
+            joinError = "Couldn’t join \(ssid)"
         }
     }
 

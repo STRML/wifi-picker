@@ -6,6 +6,7 @@ struct CellView: View {
     let cell: LayoutCell
     let isCurrent: Bool
     let isFocused: Bool
+    let isJoining: Bool
     let space: String
     let activate: () -> Void
     @State private var hovering = false
@@ -22,7 +23,7 @@ struct CellView: View {
                 Spacer(minLength: 4)
                 glyph("lock.fill", visible: cell.entry.secure, size: 10)
                 glyph("checkmark", visible: isCurrent, size: 11, weight: .bold)
-                signalGlyph
+                signalSlot
             }
             .padding(.horizontal, 8)
             .frame(width: Metrics.cellWidth, height: Metrics.cellHeight)
@@ -47,11 +48,17 @@ struct CellView: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    private var signalGlyph: some View {
-        Image(systemName: "wifi", variableValue: cell.entry.signal)
-            .symbolRenderingMode(.hierarchical)
-            .font(.system(size: 13))
-            .frame(width: 18, height: 16)
+    private var signalSlot: some View {
+        ZStack {
+            Image(systemName: "wifi", variableValue: cell.entry.signal)
+                .symbolRenderingMode(.hierarchical)
+                .font(.system(size: 13))
+                .opacity(isJoining ? 0 : 1)
+            ProgressView()
+                .controlSize(.mini)
+                .opacity(isJoining ? 1 : 0)
+        }
+        .frame(width: 18, height: 16)
     }
 
     private func glyph(_ name: String, visible: Bool, size: CGFloat, weight: Font.Weight = .regular) -> some View {
