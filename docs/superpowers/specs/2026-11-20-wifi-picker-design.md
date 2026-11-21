@@ -33,8 +33,8 @@ Later spike facts, measured from the signed app:
 ## Non-goals
 
 Personal Hotspot, Wi-Fi diagnostics, Network Locations, an 802.1X (enterprise)
-join UI, and a hidden-network join UI. A footer link opens System Settings for
-hidden networks.
+join UI, and a hidden-network join UI. The footer's "Wi-Fi Settings…" row opens
+System Settings, which covers hidden networks. An outside click or another app activating closes the panel.
 
 ## Anti-goals
 

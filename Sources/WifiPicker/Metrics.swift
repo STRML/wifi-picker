@@ -3,7 +3,7 @@ import WifiPickerCore
 
 enum Metrics {
     static let columns = 3
-    static let panelWidth: CGFloat = 600
+    static let panelWidth: CGFloat = 690
     static let gridInset: CGFloat = 12
     static let columnSpacing: CGFloat = 6
     static let cellHeight: CGFloat = 30

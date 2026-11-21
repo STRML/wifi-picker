@@ -7,12 +7,11 @@ final class StatusItemController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let panel: PickerPanel
     private let model: PickerModel
-    private let dismissOnOutsideClick: Bool
     private var outsideClickMonitor: Any?
+    private var activationObserver: NSObjectProtocol?
 
-    init(model: PickerModel, dismissOnOutsideClick: Bool) {
+    init(model: PickerModel) {
         self.model = model
-        self.dismissOnOutsideClick = dismissOnOutsideClick
         panel = PickerPanel(content: PickerRootView(model: model))
         super.init()
         statusItem.button?.target = self
@@ -98,18 +97,28 @@ final class StatusItemController: NSObject {
     }
 
     private func installOutsideClickMonitor() {
-        guard dismissOnOutsideClick, outsideClickMonitor == nil else { return }
+        guard outsideClickMonitor == nil else { return }
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] _ in
+            Task { @MainActor in self?.close() }
+        }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.close() }
         }
     }
 
     private func removeOutsideClickMonitor() {
-        guard let monitor = outsideClickMonitor else { return }
-        NSEvent.removeMonitor(monitor)
-        outsideClickMonitor = nil
+        if let monitor = outsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            outsideClickMonitor = nil
+        }
+        if let observer = activationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            activationObserver = nil
+        }
     }
 
     private func updateIcon() {

@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model.frameSink = { dumper.write(reason: $0, frames: $1) }
             self.dumper = dumper
         }
-        let controller = StatusItemController(model: model, dismissOnOutsideClick: !options.openPanel)
+        let controller = StatusItemController(model: model)
         self.model = model
         self.controller = controller
         service.start()

@@ -18,7 +18,7 @@ import Testing
 
     @Test(arguments: [
         "Free Airport WIFI", "Unitedwifi.com", "cowadlwifi12", "skyfi_secure", "@NRadio-5AB2", "016airport",
-        "Remote Office", "Samotop", "Starbucks", "NETGEAR42", "xfinitywifi", "Sam's", "'s home", "",
+        "Remote Office", "Samotop", "Joe's Pizza", "Maria’s Cafe", "Starbucks", "NETGEAR42", "xfinitywifi", "Sam's", "'s home", "",
     ])
     func ordinaryNetworksAreNotHotspots(name: String) {
         #expect(HotspotClassifier.isHotspot(name) == false, "\(name)")

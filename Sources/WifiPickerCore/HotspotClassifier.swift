@@ -19,6 +19,6 @@ public enum HotspotClassifier {
     }
 
     private static func isPossessive(_ ssid: String) -> Bool {
-        ssid.contains(/^[^'’]+['’][sS]\s+\S/)
+        ssid.contains(/(?i)^[^'’]+['’]s\s+(phone|mobile|tablet|note|s\d+|z\s?(flip|fold))/)
     }
 }

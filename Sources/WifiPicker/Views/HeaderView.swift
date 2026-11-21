@@ -18,8 +18,7 @@ struct HeaderView: View {
             RescanButton(model: model)
             Toggle("Wi-Fi", isOn: powerBinding)
                 .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
+                .toggleStyle(AccentSwitchStyle())
         }
         .padding(.horizontal, 14)
     }
