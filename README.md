@@ -87,6 +87,7 @@ swift test                     # core layout tests, including a 500-run property
 scripts/install.sh             # build, sign with your Apple Development identity, install to ~/Applications
 scripts/release.sh 1.0.0       # universal build, Developer ID signing, notarization via `asc`, stapled zip
 WifiPicker.app/Contents/MacOS/WifiPicker --demo --open-panel   # fake networks, for screenshots
+swift scripts/make-screenshot.swift panel.png docs/screenshot.png   # wallpaper + menu bar around a panel capture
 ```
 
 Requires Xcode 16+ (Swift 6 toolchain). Signing identities are set in `scripts/bundle.sh` and
