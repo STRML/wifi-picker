@@ -40,7 +40,7 @@ took **66.6 ms**, and that cache already held 16 of the 17 networks a fresh scan
 | **Three columns** | Hotspots, Known and Other, side by side instead of stacked. Alphabetical within each column, so the same networks always land in the same place. |
 | **Nothing moves** | The layout freezes when the panel opens. Signal bars and the checkmark update inside their cells; a network that shows up late goes to the bottom of its own column. |
 | **Connection stats** | RSSI, SNR, channel, band, width, Wi-Fi generation, link rate, your IP and router, live while the panel is open. The stock menu hides most of this behind Option-click. |
-| **One-click join** | Saved networks join with the password macOS already has. New secured networks get an inline password sheet that floats over the grid instead of pushing it around. |
+| **Click to join** | Saved networks try the password macOS already has. If macOS won't share it, or the network is new, a password sheet floats over the grid instead of pushing it around. |
 | **Keyboard** | Arrows move across the grid, Return joins, `⌘R` rescans, Esc closes. |
 | **Lightweight** | No timers and no background scanning while closed. See [below](#how-light-is-it). |
 
