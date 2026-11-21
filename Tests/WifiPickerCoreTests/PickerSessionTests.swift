@@ -22,14 +22,6 @@ import Testing
         #expect(didOpen)
     }
 
-    @Test func markingTheCacheLoadedLetsAnOpenProceedWithoutData() {
-        var session = PickerSession()
-        session.markCacheLoaded()
-        let didOpen = session.open(at: t0)
-        #expect(didOpen)
-        #expect(session.layout.readingOrder.isEmpty)
-    }
-
     @Test func aSecondOpenWhileOpenNeverRefreezes() {
         var session = PickerSession()
         session.ingest(

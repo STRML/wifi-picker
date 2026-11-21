@@ -94,8 +94,10 @@ final class PickerModel {
         opening = true
         defer { opening = false }
         gate.requestIfNeeded()
-        await waitForFirstCacheRead()
+        let cached = await service.cachedSamples()
+        guard !Task.isCancelled else { return false }
         now = Date()
+        session.ingest(cached, at: now)
         guard session.open(at: now) else { return false }
         focusedSSID = nil
         scanFailed = false
@@ -111,8 +113,14 @@ final class PickerModel {
         rescan()
     }
 
+    func scanOnOpen() {
+        guard canScan, !scanning, joiningSSID == nil else { return }
+        service.scanIfCacheStale()
+    }
+
     func endSession() {
         session.close()
+        passwordRequest = nil
         clockTask?.cancel()
         clockTask = nil
         service.setLive(false)
@@ -120,7 +128,7 @@ final class PickerModel {
     }
 
     func rescan() {
-        guard canScan, !scanning else { return }
+        guard canScan, !scanning, joiningSSID == nil else { return }
         service.scan()
     }
 
@@ -161,8 +169,8 @@ final class PickerModel {
     }
 
     func dismissPasswordRequest() -> Bool {
-        guard passwordRequest != nil else { return false }
-        if joiningSSID == nil { passwordRequest = nil }
+        guard passwordRequest != nil, joiningSSID == nil else { return false }
+        passwordRequest = nil
         return true
     }
 
@@ -188,6 +196,7 @@ final class PickerModel {
 
     private func finishJoin(_ ssid: String, _ outcome: JoinOutcome) {
         joiningSSID = nil
+        guard isOpen else { return }
         switch outcome {
         case .connected:
             passwordRequest = nil
@@ -228,15 +237,8 @@ final class PickerModel {
 
     private func accessChanged(_ newAccess: LocationAccess) {
         access = newAccess
-        guard newAccess == .granted else { return }
-        isOpen ? refreshFromSystem() : service.refreshCache()
-    }
-
-    private func waitForFirstCacheRead() async {
-        for _ in 0..<75 where !session.cacheLoaded {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-        session.markCacheLoaded()
+        guard newAccess == .granted, isOpen else { return }
+        refreshFromSystem()
     }
 
     private func startClock() {

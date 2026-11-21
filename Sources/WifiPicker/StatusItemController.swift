@@ -9,6 +9,7 @@ final class StatusItemController: NSObject {
     private let model: PickerModel
     private var outsideClickMonitor: Any?
     private var activationObserver: NSObjectProtocol?
+    private var openTask: Task<Void, Never>?
 
     init(model: PickerModel) {
         self.model = model
@@ -24,17 +25,23 @@ final class StatusItemController: NSObject {
     }
 
     func open() {
-        guard !model.isOpen, let anchor = anchorRect() else { return }
-        Task {
+        guard !model.isOpen, openTask == nil, let anchor = anchorRect() else { return }
+        openTask = Task {
+            defer { openTask = nil }
             guard await model.beginSession() else { return }
+            guard !Task.isCancelled else {
+                model.endSession()
+                return
+            }
             panel.place(under: anchor, height: desiredHeight(on: Self.screen(containing: anchor)))
             panel.makeKeyAndOrderFront(nil)
             installOutsideClickMonitor()
-            model.refreshFromSystem()
+            model.scanOnOpen()
         }
     }
 
     func close() {
+        openTask?.cancel()
         guard model.isOpen else { return }
         panel.orderOut(nil)
         model.endSession()
@@ -46,6 +53,7 @@ final class StatusItemController: NSObject {
             showMenu()
             return
         }
+        guard openTask == nil else { return close() }
         guard model.isOpen else { return open() }
         panel.isVisible ? close() : panel.makeKeyAndOrderFront(nil)
     }

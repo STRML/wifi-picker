@@ -18,10 +18,6 @@ public struct PickerSession: Sendable {
         layout.absorb(store)
     }
 
-    public mutating func markCacheLoaded() {
-        cacheLoaded = true
-    }
-
     @discardableResult
     public mutating func open(at now: Date) -> Bool {
         guard !isOpen, cacheLoaded else { return false }
