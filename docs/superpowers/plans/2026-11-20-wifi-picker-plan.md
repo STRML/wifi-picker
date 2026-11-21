@@ -22,7 +22,10 @@ Read that design first; this plan says how and in what order.
     │   ├── WifiPickerCore/        pure logic, no AppKit, no CoreWLAN
     │   │   ├── ScanSample.swift       one BSSID reading (ssid, rssi, channel band, security, known)
     │   │   ├── NetworkStore.swift     merges samples by SSID, tracks lastSeen, takes a clock
-    │   │   └── LayoutEngine.swift     freeze(store, now) -> FrozenLayout; apply(update) appends only
+    │   │   ├── HotspotClassifier.swift  pure: does an SSID look like a phone hotspot
+    │   │   ├── LayoutEngine.swift     freeze(store, now) -> FrozenLayout (three columns); absorb appends only
+    │   │   ├── PickerSession.swift    owns store + layout; opens once, after the first cache read
+    │   │   └── JoinPolicy.swift       pure: when to ask for a password, what an error means
     │   └── WifiPicker/            the app
     │       ├── main.swift             NSApplication, accessory policy
     │       ├── StatusItemController.swift  NSStatusItem, opens and closes the panel
@@ -45,15 +48,23 @@ Read that design first; this plan says how and in what order.
   sample, `known`, `firstSeen`, `lastSeen`. `ingest(samples, at:)` merges a
   batch. A batch never removes entries. `prune(olderThan:)` drops entries unseen
   for that long; only `LayoutEngine.freeze` calls it (5 minutes).
-- `FrozenLayout` holds `sections: [Section]`, each with ordered `slots: [SSID]`.
-  Sections: `.known`, `.other`, `.new`. `cell(ssid)` returns live data plus a
-  `dimmed` flag (unseen for 60 s or more).
-- `LayoutEngine.freeze(store, now:)` prunes, sorts Known and Other by
-  `localizedCaseInsensitiveCompare` with raw bytes as a tiebreak, and leaves New
-  empty. `layout.absorb(store)` appends any SSID not yet in a slot to `.new` in
-  `firstSeen` order and changes nothing else.
-- The column count is a view concern (3). The core exposes slots in reading
-  order only.
+- `FrozenLayout` holds `columns: [LayoutColumn]`, each with ordered `slots: [SSID]`.
+  Columns, left to right: `.hotspots`, `.known`, `.other`. `cell(ssid)` returns
+  live data plus a `dimmed` flag (unseen for 60 s or more).
+- `HotspotClassifier.isHotspot(ssid)` matches phone and mobile-hotspot names
+  (iPhone, iPad, Galaxy, Pixel, AndroidAP, Android, OnePlus, Redmi, Xiaomi, Moto,
+  Hotspot, MiFi, Jetpack, and the "<name>'s <device>" possessive) case-insensitively.
+  Hotspot wins over Known.
+- `LayoutEngine.freeze(store, now:)` prunes, assigns each entry a column, and sorts
+  each column by `localizedCaseInsensitiveCompare` with raw bytes as a tiebreak.
+  `layout.absorb(store)` appends any SSID not yet in a slot to the bottom of the
+  column it classifies into, in `firstSeen` order, and changes nothing else.
+- `PickerSession` owns the store and the layout. `open(at:)` freezes once, only
+  after the first cache ingest (or an explicit `markCacheLoaded()` after a
+  timeout), and refuses while already open. Ingests while open absorb. Nothing
+  else calls `freeze`.
+- `FrozenLayout.move(from:_:)` implements the keyboard rules: up and down inside a
+  column, left and right to the same row index in the adjacent filled column.
 
 ## Tests (write first, all red before the code)
 
@@ -63,9 +74,9 @@ checked in the real-app verification below.
 
 1. Property test, seeded random generator, 500 iterations: build a store, freeze,
    then apply 1-30 random batches (new SSIDs, missing SSIDs, RSSI changes,
-   known flips) with `absorb` after each. Invariant: the slot sequence before
-   every absorb is a prefix of the sequence after it, per section, and `.known`
-   and `.other` never change length.
+   known flips) with `absorb` after each. Invariant: for every column, the slot
+   list before every absorb is a prefix of the list after it, and the column of
+   every existing slot never changes.
 2. Determinism: freezing two stores holding the same entries in different
    insertion orders gives identical layouts.
 3. Sort: mixed case, accents, emoji and an identical-ignoring-case pair sort
@@ -76,6 +87,15 @@ checked in the real-app verification below.
    still present (dimmed) in an existing frozen layout.
 7. Known flip while open: an SSID that becomes known stays in its `.other` slot
    until the next freeze.
+8. Hotspot classification: the listed names, both apostrophes and case variants
+   are hotspots; ordinary names are not; hotspot wins over Known.
+9. Arrivals append to the bottom of their own column in arrival order and never
+   touch another column.
+10. Session: open is refused until the first cache ingest; a second open while open
+    never refreezes; a random open/ingest/close sequence never changes a column's
+    slots while open.
+11. Keyboard navigation: up and down clamp inside a column; left and right keep the
+    row index, clamp to the shorter column and skip empty columns.
 
 ## App behaviour (build after the core is green)
 
@@ -84,14 +104,22 @@ checked in the real-app verification below.
   never scans on a timer. `scan()` runs `scanForNetworks(withSSID: nil)` on
   the queue and ingests the result; a second call while one runs is a no-op.
   The current SSID comes from `interface.ssid()`.
-- Opening the panel: freeze the layout from the in-memory store (no CoreWLAN
-  call on the open path), show the panel, then call `scan()`.
+- Opening the panel: wait (at most 1.5 s) for the first cache read, freeze the
+  layout from the in-memory store through `PickerSession.open`, show the panel,
+  then re-read `cachedScanResults()` on the service queue and call `scan()`.
+  The cache read costs about 67 ms, so it never runs on the main thread, and the
+  `scanCacheUpdated` event alone is not relied on (it fired twice in 180 s).
 - `PickerPanel` is a non-activating borderless `NSPanel` that can become key (for
   the password field). Its top edge stays pinned under the status item. Its
   height grows only, to at most 70% of the screen's visible height, after which
   the grid scrolls inside a `ScrollView`. It closes on Esc, on a click outside,
   and on a second click of the status item.
-- Cells: fixed height 30 pt, fixed width (panel width 600 pt, 3 columns).
+- Grid: three fixed-width columns (Hotspots, Known, Other), each with a 26 pt
+  header label and 34 pt rows, inside one shared vertical `ScrollView`. Panel
+  height is header + tallest column, capped at 70% of the visible height. An empty
+  column shows a dim "None nearby" line at cell height.
+- Cells: fixed height 30 pt, fixed width (panel width 600 pt, 3 columns, minus
+  the legacy scroller width so rows fit with or without a scroller).
   Contents: name (truncates in the middle), lock glyph, signal bars glyph
   (`wifi` SF Symbol with variable value from RSSI), checkmark for the current
   network. Hover highlight with `.quaternary` fill; pressed state; dimmed at
@@ -99,8 +127,8 @@ checked in the real-app verification below.
 - Header: fixed height. Wi-Fi power toggle, current network name and status
   line (one line, fixed height), Rescan button with a spinner that replaces its
   glyph in place.
-- Keyboard: arrows move a focus ring across the grid in reading order; Return
-  joins; Esc closes.
+- Keyboard: arrows move a focus ring (up and down inside a column, left and right
+  to the same row in the adjacent column); Return joins; Esc closes.
 - Joining: in the design's order. The password sheet overlays the bottom of the
   panel and never changes the grid's frames. Join runs on the service queue;
   the joining cell shows a spinner in place of the bars glyph.
@@ -116,7 +144,8 @@ checked in the real-app verification below.
 1. `scripts/install.sh`.
 2. Open the panel from a test hook: the app accepts a `--open-panel` launch
    argument and a `--dump-frames <file>` argument that writes every cell's
-   SSID and frame as JSON after each layout pass.
+   SSID, column name and frame as JSON after each layout pass (JSON Lines, with a
+   `reason` of `layout` or `scan-finished`).
 3. Wait for one scan to complete, dump frames, and compare against the dump
    taken at open: every SSID present at open must keep an identical frame.
 4. Take a screenshot of the panel with `screencapture -l <windowid>`.
@@ -124,4 +153,5 @@ checked in the real-app verification below.
 ## Commits
 
 One commit per step: core and tests, app shell and panel, views, joining,
-scripts. Subjects use `feat:`, `test:` or `chore:`.
+scripts, then the session fix, the three-column layout and the docs. Subjects use
+`feat:`, `fix:`, `test:`, `docs:` or `chore:`.
