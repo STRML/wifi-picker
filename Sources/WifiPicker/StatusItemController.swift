@@ -87,12 +87,22 @@ final class StatusItemController: NSObject {
         return window.convertToScreen(button.convert(button.bounds, to: nil))
     }
 
+    private func isInsidePanelOrStatusItem(_ point: NSPoint) -> Bool {
+        if let statusFrame = statusItem.button?.window?.frame, statusFrame.contains(point) { return true }
+        if let anchor = anchorRect(), anchor.contains(point) { return true }
+        return panel.isVisible && panel.frame.contains(point)
+    }
+
     private func installOutsideClickMonitor() {
         guard outsideClickMonitor == nil else { return }
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         ) { [weak self] _ in
-            Task { @MainActor in self?.close() }
+            let point = NSEvent.mouseLocation
+            Task { @MainActor in
+                guard let self, !self.isInsidePanelOrStatusItem(point) else { return }
+                self.close()
+            }
         }
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
