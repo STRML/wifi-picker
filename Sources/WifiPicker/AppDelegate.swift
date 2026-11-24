@@ -1,4 +1,5 @@
 import AppKit
+import WifiPickerCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -8,17 +9,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let options = LaunchOptions(arguments: CommandLine.arguments)
-        let service = WiFiService(demo: options.demo)
-        let model = PickerModel(service: service, gate: LocationGate(demo: options.demo))
-        if let path = options.dumpFramesPath {
+        let environment: any PickerEnvironment = options.demo ? DemoEnvironment() : MacWiFiEnvironment()
+        let model = PickerModel(environment: environment)
+        let dumper = options.dumpFramesPath.map { path -> FrameDumper in
             let dumper = FrameDumper(path: path)
-            model.frameSink = { dumper.write(reason: $0, frames: $1) }
-            self.dumper = dumper
+            model.onScanFinished = { dumper.scanFinished() }
+            return dumper
         }
-        let controller = StatusItemController(model: model)
+        let controller = StatusItemController(model: model, frameDumper: dumper)
         self.model = model
+        self.dumper = dumper
         self.controller = controller
-        service.start()
+        environment.start()
         guard options.openPanel else { return }
         Task {
             try? await Task.sleep(for: .seconds(1))

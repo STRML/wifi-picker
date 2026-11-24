@@ -1,20 +1,6 @@
 import SwiftUI
 import WifiPickerCore
 
-struct CellFrames: Equatable {
-    let column: String
-    let window: CGRect
-    let grid: CGRect
-}
-
-struct CellFramesKey: PreferenceKey {
-    static let defaultValue: [String: CellFrames] = [:]
-
-    static func reduce(value: inout [String: CellFrames], nextValue: () -> [String: CellFrames]) {
-        value.merge(nextValue()) { _, new in new }
-    }
-}
-
 struct GridView: View {
     let model: PickerModel
     private static let space = "grid"
@@ -23,7 +9,7 @@ struct GridView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 HStack(alignment: .top, spacing: Metrics.columnSpacing) {
-                    ForEach(model.layout.columns, id: \.kind.rawValue) { column in
+                    ForEach(model.columns, id: \.kind.rawValue) { column in
                         columnView(column)
                     }
                 }
@@ -36,7 +22,6 @@ struct GridView: View {
                 guard let ssid else { return }
                 proxy.scrollTo(ssid)
             }
-            .onPreferenceChange(CellFramesKey.self) { model.cellFramesChanged($0) }
         }
     }
 

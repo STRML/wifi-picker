@@ -1,4 +1,5 @@
 import SwiftUI
+import WifiPickerCore
 
 struct StatsRow: View {
     let stats: LinkStats?

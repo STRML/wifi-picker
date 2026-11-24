@@ -11,6 +11,7 @@ struct CellView: View {
     let space: String
     let activate: () -> Void
     @State private var hovering = false
+    @Environment(\.captureCellFrames) private var captureCellFrames
 
     private var interactive: Bool { !cell.dimmed }
 
@@ -35,11 +36,13 @@ struct CellView: View {
         .opacity(cell.dimmed ? 0.4 : 1)
         .onHover { hovering = $0 }
         .background {
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: CellFramesKey.self,
-                    value: [ssid: CellFrames(column: String(describing: column), window: proxy.frame(in: .global), grid: proxy.frame(in: .named(space)))]
-                )
+            if captureCellFrames {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: CellFramesKey.self,
+                        value: [ssid: CellFrames(column: String(describing: column), window: proxy.frame(in: .global), grid: proxy.frame(in: .named(space)))]
+                    )
+                }
             }
         }
         .accessibilityElement(children: .ignore)

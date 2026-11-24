@@ -28,6 +28,6 @@ enum DemoNetworks {
     ]
 
     private static func sample(_ ssid: String, rssi: Int, known: Bool = false, secure: Bool = true) -> ScanSample {
-        ScanSample(ssid: ssid, bssid: "", rssi: rssi, band: .ghz5, secure: secure, known: known)
+        ScanSample(ssid: ssid, bssid: "", rssi: rssi, secure: secure, known: known)
     }
 }

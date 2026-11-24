@@ -2,49 +2,41 @@ import CoreWLAN
 import Foundation
 import WifiPickerCore
 
-struct InterfaceState: Sendable, Equatable {
-    var powerOn: Bool
-    var ssid: String?
-    var rssi: Int?
-}
-
-enum WiFiEvent: Sendable {
-    case samples([ScanSample])
-    case interface(InterfaceState)
-    case scanStarted
-    case scanFinished(failed: Bool)
-    case joinFinished(ssid: String, outcome: JoinOutcome)
-    case stats(LinkStats?)
-}
-
 private struct UncheckedBox<Value>: @unchecked Sendable {
     let value: Value
 }
 
-final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
-    let events: AsyncStream<WiFiEvent>
-    private let continuation: AsyncStream<WiFiEvent>.Continuation
+final class MacWiFiEnvironment: NSObject, CWEventDelegate, PickerEnvironment, @unchecked Sendable {
+    let events: AsyncStream<PickerEnvironmentEvent>
+    let initialLocationAccess: LocationAccess
+
+    private let continuation: AsyncStream<PickerEnvironmentEvent>.Continuation
     private let queue = DispatchQueue(label: "wifi-picker.service", qos: .userInitiated)
     private let scanQueue = DispatchQueue(label: "wifi-picker.scan", qos: .userInitiated)
     private let client = CWWiFiClient.shared()
-    private var networks: [String: CWNetwork] = [:]
-    private var lastInterface: InterfaceState?
-    private let scanLock = NSLock()
-    private var scanning = false
-    private let demo: Bool
-    private var live = false
-    private var lastCacheEvent: Date?
+    private let statsReader = LinkStatsReader()
+    private let locationGate: LocationGate
 
-    init(demo: Bool = false) {
-        let pair = AsyncStream.makeStream(of: WiFiEvent.self, bufferingPolicy: .unbounded)
+    private var networks: [String: (network: CWNetwork, lastSeen: Date)] = [:]
+    private var lastInterface: InterfaceState?
+    private var scanning = false
+    private var live = false
+
+    @MainActor
+    override init() {
+        let pair = AsyncStream.makeStream(of: PickerEnvironmentEvent.self, bufferingPolicy: .unbounded)
         events = pair.stream
         continuation = pair.continuation
-        self.demo = demo
+        let gate = LocationGate()
+        locationGate = gate
+        initialLocationAccess = gate.access
         super.init()
+        gate.onChange = { [continuation] access in
+            continuation.yield(.locationAccess(access))
+        }
     }
 
     func start() {
-        guard !demo else { return emitDemo() }
         queue.async { [self] in
             client.delegate = self
             let monitored: [CWEventType] = [
@@ -58,11 +50,7 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
     }
 
     func cachedSamples() async -> [ScanSample] {
-        guard !demo else {
-            emitDemo()
-            return DemoNetworks.samples
-        }
-        return await withCheckedContinuation { continuation in
+        await withCheckedContinuation { continuation in
             queue.async { [self] in
                 publishInterface()
                 continuation.resume(returning: currentCacheSamples())
@@ -70,16 +58,12 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
         }
     }
 
-    func scanIfCacheStale() {
-        guard !demo else { return }
-        queue.async { [self] in
-            guard ScanPolicy.shouldScanOnOpen(lastCacheEvent: lastCacheEvent, now: Date()) else { return }
-            scan()
-        }
+    @MainActor
+    func requestLocationIfNeeded() {
+        locationGate.requestIfNeeded()
     }
 
     func refreshCache() {
-        guard !demo else { return emitDemo() }
         queue.async { [self] in
             publishInterface()
             readCache()
@@ -87,27 +71,27 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
     }
 
     func scan() {
-        guard !demo else { return emitDemo() }
-        guard beginScan() else { return }
-        continuation.yield(.scanStarted)
-        scanQueue.async { [self] in
-            let found = fetchScan()
-            queue.async { [self] in finishScan(found) }
+        queue.async { [self] in
+            guard !scanning else { return }
+            scanning = true
+            continuation.yield(.scanStarted)
+            scanQueue.async { [self] in
+                let found = fetchScan()
+                queue.async { [self] in finishScan(found) }
+            }
         }
     }
 
     func setPower(_ on: Bool) {
-        guard !demo else { return }
         queue.async { [self] in
             try? client.interface()?.setPower(on)
-            publishInterface(force: true)
+            publishInterface(force: true, powerSettled: true)
         }
     }
 
     func join(ssid: String, password: String?, secure: Bool) {
-        guard !demo else { return }
         queue.async { [self] in
-            let target = networks[ssid].map(UncheckedBox.init)
+            let target = networks[ssid].map { UncheckedBox(value: $0.network) }
             scanQueue.async { [self] in
                 let outcome = associate(target, password: password, secure: secure)
                 queue.async { [self] in
@@ -118,11 +102,25 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
         }
     }
 
+    func setLive(_ on: Bool) {
+        queue.async { [self] in
+            live = on
+            if on {
+                try? client.startMonitoringEvent(with: .linkQualityDidChange)
+                publishStats()
+            } else {
+                try? client.stopMonitoringEvent(with: .linkQualityDidChange)
+            }
+        }
+    }
+
     func scanCacheUpdatedForWiFiInterface(withName interfaceName: String) {
         queue.async { [self] in
-            lastCacheEvent = Date()
-            guard live else { return }
-            readCache()
+            if live {
+                readCache()
+            } else {
+                continuation.yield(.cacheUpdated)
+            }
         }
     }
 
@@ -145,30 +143,14 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
         }
     }
 
-    func setLive(_ on: Bool) {
-        guard !demo else {
-            continuation.yield(.stats(on ? DemoNetworks.stats : nil))
-            return
-        }
-        queue.async { [self] in
-            live = on
-            if on {
-                try? client.startMonitoringEvent(with: .linkQualityDidChange)
-                publishStats()
-            } else {
-                try? client.stopMonitoringEvent(with: .linkQualityDidChange)
-            }
-        }
-    }
-
     private func publishStats() {
         guard live else { return }
-        continuation.yield(.stats(client.interface().flatMap(LinkStats.read)))
+        continuation.yield(.stats(client.interface().flatMap { statsReader.read(from: $0) }))
     }
 
     private func associate(_ target: UncheckedBox<CWNetwork>?, password: String?, secure: Bool) -> JoinOutcome {
         guard let interface = client.interface(), let network = target?.value else {
-            return .failed("Network not in range")
+            return .failed(String(localized: "Network not in range"))
         }
         do {
             try interface.associate(to: network, password: password)
@@ -176,25 +158,11 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
         } catch let error as NSError {
             return JoinPolicy.outcome(
                 forErrorCode: error.code,
-                message: error.localizedDescription,
+                fallbackMessage: error.localizedDescription,
                 hadPassword: password != nil,
                 secure: secure
             )
         }
-    }
-
-    private func beginScan() -> Bool {
-        scanLock.lock()
-        defer { scanLock.unlock() }
-        guard !scanning else { return false }
-        scanning = true
-        return true
-    }
-
-    private func endScan() {
-        scanLock.lock()
-        scanning = false
-        scanLock.unlock()
     }
 
     private func fetchScan() -> UncheckedBox<Set<CWNetwork>>? {
@@ -204,20 +172,14 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
     }
 
     private func finishScan(_ found: UncheckedBox<Set<CWNetwork>>?) {
-        endScan()
-        lastCacheEvent = Date()
+        scanning = false
         publishInterface()
         guard let found else {
             continuation.yield(.scanFinished(failed: true))
             return
         }
-        ingest(Array(found.value))
+        continuation.yield(.samples(samples(from: Array(found.value))))
         continuation.yield(.scanFinished(failed: false))
-    }
-
-    private func emitDemo() {
-        continuation.yield(.interface(InterfaceState(powerOn: true, ssid: DemoNetworks.current, rssi: -44)))
-        continuation.yield(.samples(DemoNetworks.samples))
     }
 
     private func readCache() {
@@ -229,11 +191,8 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
         return samples(from: Array(interface.cachedScanResults() ?? []))
     }
 
-    private func ingest(_ found: [CWNetwork]) {
-        continuation.yield(.samples(samples(from: found)))
-    }
-
     private func samples(from found: [CWNetwork]) -> [ScanSample] {
+        let now = Date()
         let known = knownSSIDs()
         var samples: [ScanSample] = []
         var strongest: [String: CWNetwork] = [:]
@@ -244,17 +203,28 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
                     ssid: ssid,
                     bssid: network.bssid ?? "",
                     rssi: network.rssiValue,
-                    band: Band(network.wlanChannel?.channelBand),
                     secure: !network.supportsSecurity(.none),
                     known: known.contains(ssid)
                 )
             )
-            if network.rssiValue >= (strongest[ssid]?.rssiValue ?? Int.min) {
+            if let current = strongest[ssid] {
+                if Self.isStronger(network, than: current) { strongest[ssid] = network }
+            } else {
                 strongest[ssid] = network
             }
         }
-        networks.merge(strongest) { _, latest in latest }
+        for (ssid, network) in strongest {
+            networks[ssid] = (network, now)
+        }
+        networks = networks.filter { now.timeIntervalSince($0.value.lastSeen) <= PickerSession.pruneInterval }
         return samples
+    }
+
+    private static func isStronger(_ candidate: CWNetwork, than existing: CWNetwork) -> Bool {
+        if candidate.rssiValue != existing.rssiValue {
+            return candidate.rssiValue > existing.rssiValue
+        }
+        return (candidate.bssid ?? "") < (existing.bssid ?? "")
     }
 
     private func knownSSIDs() -> Set<String> {
@@ -262,7 +232,7 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
         return Set(profiles.array.compactMap { ($0 as? CWNetworkProfile)?.ssid })
     }
 
-    private func publishInterface(force: Bool = false) {
+    private func publishInterface(force: Bool = false, powerSettled: Bool = false) {
         guard let interface = client.interface() else { return }
         let powerOn = interface.powerOn()
         let rssi = powerOn ? interface.rssiValue() : 0
@@ -273,17 +243,6 @@ final class WiFiService: NSObject, CWEventDelegate, @unchecked Sendable {
         )
         guard force || state != lastInterface else { return }
         lastInterface = state
-        continuation.yield(.interface(state))
-    }
-}
-
-private extension Band {
-    init(_ band: CWChannelBand?) {
-        switch band {
-        case .band2GHz: self = .ghz2
-        case .band5GHz: self = .ghz5
-        case .band6GHz: self = .ghz6
-        default: self = .unknown
-        }
+        continuation.yield(powerSettled ? .powerChanged(state) : .interface(state))
     }
 }

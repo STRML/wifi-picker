@@ -1,4 +1,5 @@
 import SwiftUI
+import WifiPickerCore
 
 struct PasswordSheet: View {
     let model: PickerModel
@@ -37,7 +38,7 @@ struct PasswordSheet: View {
                     .lineLimit(1)
                     .frame(height: 14)
                 Spacer()
-                Button("Cancel") { _ = model.dismissPasswordRequest() }
+                Button("Cancel") { model.dismissPasswordRequest() }
                     .disabled(joining)
                 joinButton
             }

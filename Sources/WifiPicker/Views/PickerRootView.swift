@@ -3,6 +3,7 @@ import WifiPickerCore
 
 struct PickerRootView: View {
     let model: PickerModel
+    var frameDumper: FrameDumper? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,6 +24,7 @@ struct PickerRootView: View {
         .frame(width: Metrics.panelWidth)
         .frame(maxHeight: .infinity, alignment: .top)
         .transaction { $0.animation = nil }
+        .captureCellFrames(using: frameDumper)
     }
 }
 

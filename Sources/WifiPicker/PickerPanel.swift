@@ -2,12 +2,6 @@ import AppKit
 import SwiftUI
 import WifiPickerCore
 
-enum PanelKey {
-    case escape
-    case confirm
-    case arrow(MoveDirection)
-}
-
 @MainActor
 final class PickerPanel: NSPanel {
     var keyHandler: (@MainActor (PanelKey) -> Bool)?
@@ -35,10 +29,12 @@ final class PickerPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
-    var height: CGFloat { frame.height }
+    static func screen(containing rect: NSRect) -> NSScreen? {
+        NSScreen.screens.first { $0.frame.intersects(rect) }
+    }
 
     func place(under anchor: NSRect, height: CGFloat) {
-        let visible = (NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main)?.visibleFrame
+        let visible = (Self.screen(containing: anchor) ?? NSScreen.main)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let left = min(
             max(anchor.midX - Metrics.panelWidth / 2, visible.minX + Metrics.screenMargin),

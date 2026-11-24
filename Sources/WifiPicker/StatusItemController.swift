@@ -9,43 +9,45 @@ final class StatusItemController: NSObject {
     private let model: PickerModel
     private var outsideClickMonitor: Any?
     private var activationObserver: NSObjectProtocol?
-    private var openTask: Task<Void, Never>?
 
-    init(model: PickerModel) {
+    init(model: PickerModel, frameDumper: FrameDumper? = nil) {
         self.model = model
-        panel = PickerPanel(content: PickerRootView(model: model))
+        panel = PickerPanel(content: PickerRootView(model: model, frameDumper: frameDumper))
         super.init()
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusItemClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        panel.keyHandler = { [weak self] key in self?.handle(key) ?? false }
-        model.onLayoutChange = { [weak self] in self?.growPanel() }
+        panel.keyHandler = { [weak self] key in self?.model.handleKey(key) ?? false }
+        model.onPanelEvent = { [weak self] event in self?.handlePanelEvent(event) }
         updateIcon()
         trackIcon()
     }
 
     func open() {
-        guard !model.isOpen, openTask == nil, let anchor = anchorRect() else { return }
-        openTask = Task {
-            defer { openTask = nil }
-            guard await model.beginSession() else { return }
-            guard !Task.isCancelled else {
-                model.endSession()
-                return
-            }
-            panel.place(under: anchor, height: desiredHeight(on: Self.screen(containing: anchor)))
-            panel.makeKeyAndOrderFront(nil)
-            installOutsideClickMonitor()
-            model.scanOnOpen()
-        }
+        guard anchorRect() != nil else { return }
+        model.open()
     }
 
     func close() {
-        openTask?.cancel()
-        guard model.isOpen else { return }
-        panel.orderOut(nil)
-        model.endSession()
-        removeOutsideClickMonitor()
+        model.close()
+    }
+
+    private func handlePanelEvent(_ event: PanelLifecycleEvent) {
+        switch event {
+        case .opened:
+            guard let anchor = anchorRect() else {
+                model.close()
+                return
+            }
+            panel.place(under: anchor, height: desiredHeight(on: PickerPanel.screen(containing: anchor)))
+            panel.makeKeyAndOrderFront(nil)
+            installOutsideClickMonitor()
+        case .layoutGrew:
+            panel.growIfNeeded(to: desiredHeight(on: panel.screen))
+        case .closed:
+            panel.orderOut(nil)
+            removeOutsideClickMonitor()
+        }
     }
 
     @objc private func statusItemClicked() {
@@ -53,9 +55,14 @@ final class StatusItemController: NSObject {
             showMenu()
             return
         }
-        guard openTask == nil else { return close() }
-        guard model.isOpen else { return open() }
-        panel.isVisible ? close() : panel.makeKeyAndOrderFront(nil)
+        switch model.panelPhase {
+        case .closed:
+            open()
+        case .opening:
+            close()
+        case .open:
+            panel.isVisible ? close() : panel.makeKeyAndOrderFront(nil)
+        }
     }
 
     private func showMenu() {
@@ -67,30 +74,10 @@ final class StatusItemController: NSObject {
         statusItem.menu = nil
     }
 
-    private func handle(_ key: PanelKey) -> Bool {
-        switch key {
-        case .escape:
-            if !model.dismissPasswordRequest() { close() }
-            return true
-        case .arrow(let direction):
-            guard model.passwordRequest == nil else { return false }
-            model.moveFocus(direction)
-            return true
-        case .confirm:
-            guard model.passwordRequest == nil else { return false }
-            model.activateFocused()
-            return true
-        }
-    }
-
-    private func growPanel() {
-        panel.growIfNeeded(to: desiredHeight(on: panel.screen))
-    }
-
     private func desiredHeight(on screen: NSScreen?) -> CGFloat {
         let visible = (screen ?? NSScreen.main)?.visibleFrame.height ?? 900
         return Metrics.panelHeight(
-            for: model.layout,
+            tallestColumnCount: model.tallestColumnCount,
             maxHeight: visible * Metrics.maxHeightFraction
         )
     }
@@ -98,10 +85,6 @@ final class StatusItemController: NSObject {
     private func anchorRect() -> NSRect? {
         guard let button = statusItem.button, let window = button.window else { return nil }
         return window.convertToScreen(button.convert(button.bounds, to: nil))
-    }
-
-    private static func screen(containing rect: NSRect) -> NSScreen? {
-        NSScreen.screens.first { $0.frame.intersects(rect) }
     }
 
     private func installOutsideClickMonitor() {

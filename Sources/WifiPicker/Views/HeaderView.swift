@@ -42,7 +42,7 @@ struct HeaderView: View {
     }
 
     private var powerBinding: Binding<Bool> {
-        Binding(get: { model.requestedPower ?? model.interface.powerOn }, set: { model.setPower($0) })
+        Binding(get: { model.displayedPower }, set: { model.setPower($0) })
     }
 }
 
@@ -84,7 +84,7 @@ private struct RescanButton: View {
         }
         .buttonStyle(.borderless)
         .focusEffectDisabled()
-        .disabled(!model.canScan || model.scanning)
+        .disabled(!model.canRescan)
         .keyboardShortcut("r")
         .help("Rescan")
         .accessibilityLabel("Rescan")

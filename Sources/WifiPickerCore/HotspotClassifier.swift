@@ -1,12 +1,12 @@
 import Foundation
 
-public enum HotspotClassifier {
+enum HotspotClassifier {
     private static let keywords = [
         "iphone", "ipad", "galaxy", "pixel", "androidap", "android", "oneplus", "redmi", "xiaomi",
         "hotspot", "mifi", "jetpack",
     ]
 
-    public static func isHotspot(_ ssid: String) -> Bool {
+    static func isHotspot(_ ssid: String) -> Bool {
         containsKeyword(ssid) || startsMotoWord(ssid) || isPossessive(ssid)
     }
 

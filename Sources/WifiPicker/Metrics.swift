@@ -1,5 +1,4 @@
 import AppKit
-import WifiPickerCore
 
 enum Metrics {
     static let columns = 3
@@ -32,13 +31,13 @@ enum Metrics {
         headerHeight + footerHeight + 2 * separatorHeight
     }
 
-    static func contentHeight(for layout: FrozenLayout) -> CGFloat {
-        2 * gridVerticalInset + columnHeaderHeight + CGFloat(max(1, layout.tallestColumnCount)) * rowPitch
+    static func contentHeight(tallestColumnCount: Int) -> CGFloat {
+        2 * gridVerticalInset + columnHeaderHeight + CGFloat(max(1, tallestColumnCount)) * rowPitch
     }
 
-    static func panelHeight(for layout: FrozenLayout, maxHeight: CGFloat) -> CGFloat {
+    static func panelHeight(tallestColumnCount: Int, maxHeight: CGFloat) -> CGFloat {
         let maxContent = max(minContentHeight, maxHeight - chromeHeight)
-        let content = min(max(contentHeight(for: layout), minContentHeight), maxContent)
+        let content = min(max(contentHeight(tallestColumnCount: tallestColumnCount), minContentHeight), maxContent)
         return chromeHeight + content
     }
 }
